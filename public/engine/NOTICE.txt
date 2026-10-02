@@ -1,0 +1,8 @@
+Stockfish.js 19.0.0, unmodified lite single-threaded WASM engine.
+Copyright 2026 Chess.com, LLC; Stockfish contributors.
+Distributed under GPLv3 (see Copying.txt).
+Upstream: https://github.com/nmrugg/stockfish.js
+NPM release: https://www.npmjs.com/package/stockfish/v/19.0.0
+Matching source commit: 54fde71d90c7c403964f6cacef48f7bbec495df1
+Corresponding source and build scripts: stockfish-source.tar.gz in this directory.
+The bundled engine runs as a separate Web Worker using its UCI interface.

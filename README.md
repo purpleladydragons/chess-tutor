@@ -12,7 +12,7 @@ npm run dev
 The app uses React, TypeScript, vinext/Vite, and chess.js. The Cloudflare-compatible worker streams public Lichess exports through `/api/lichess`. Its identifying User-Agent avoids Lichess's generic command-line client restrictions. Upstream rate limits are surfaced without automatic retries.
 
 ```sh
-npm test             # chess accounting, PGN parsing, filters, and HTTP error behavior
+npm test             # accounting, imports, study ranking, and actual Stockfish WASM
 npm run typecheck
 npm run build
 npm run test:render  # smoke test the built worker's HTML
@@ -29,13 +29,24 @@ npm run test:render  # smoke test the built worker's HTML
 - Only completed games from the standard starting position are counted. Aborted, unfinished, variant, and custom-position games are skipped. PGN parse errors and unmatched players are reported as skipped records.
 - Unknown PGN dates remain unknown and are excluded from bounded date filters. Unknown time controls are selectable separately.
 - Synthetic sample games are explicitly labeled. They are never merged into an imported library.
-- This app helps identify lines to study; it does not make engine-based claims about move quality.
+- Study priorities find recurring problem branches; optional on-device Stockfish analysis checks a selected position separately.
+
+## Study priorities
+
+- **Unusually difficult** ranks frequency × positive excess loss rate compared with the other moves from the exact parent position. Both sides need the chosen minimum sample. Five pseudo-games at the overall loss rate smooth each group. This is a descriptive heuristic, not a causal estimate or a significance test.
+- **Frequent losses** ranks frequency × observed loss rate, equivalent to losses in that branch per 100 games in scope. Forced continuations and a first move always played are omitted.
+- **Lost every game** finds the earliest all-loss branches meeting a minimum of two games (five by default). Already-all-loss descendants are omitted. Repeated losses are evidence to investigate, not proof of a bad move.
+- Filter by your decisions or opponent replies, choose a move range through move 20, and focus on an opening or any selected line. Related ancestors and descendants are grouped by default. Counts overlap, so row scores must not be added. Move orders remain separate paths; opponent strength and later mistakes are not controlled for.
+- Review a candidate's losses in the game library, compare sibling moves, or check the position with Stockfish. Your decisions are evaluated from the pre-move position with a free search and a search restricted to your played move. Opponent replies are evaluated for your best response. Scores are always from your side.
+- Engine analysis runs in a local browser Worker only after clicking its button. Each search is limited to depth 18 or 1.8 seconds. These are quick estimates; mate scores are shown separately and deeper analysis may change a recommendation.
 
 ## Opening names and assets
 
 `lib/openings.json` includes 3,815 distinct named positions from [Lichess chess-openings](https://github.com/lichess-org/chess-openings), released under CC0. Regenerate it with `npm run openings:refresh`. PGN parsing, legality, and board positions use [chess.js](https://github.com/jhlywa/chess.js).
 
 `public/og.png` is the bespoke social card, generated with the built-in image generation tool. Prompt: a finished landscape card for “Opening Lines” with the subtitle “Your games. A clearer plan.”, warm ivory and forest green branding, sage/lavender/terracotta Sankey ribbons, move cards labelled “1. e4”, “1... c6”, and “2. d4”, and a small black knight motif. No external runtime image dependencies.
+
+`public/engine/` bundles the unmodified Stockfish.js 19.0.0 lite single-threaded JS/WASM build, its GPLv3 license, and the corresponding source archive from commit `54fde71d90c7c403964f6cacef48f7bbec495df1`. See `NOTICE.txt` there for provenance. The UI provides license and source downloads. No third-party analysis service receives game data.
 
 ## Hosting
 

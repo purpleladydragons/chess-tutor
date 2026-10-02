@@ -28,6 +28,21 @@ export function makeDemo(): Game[] {
     }
   }
   const whiteGames = games.filter((_,i) => i%3===0).map((g,i) => ({...g, id:`demo-white-${i}`, white:'demo_player', black:g.white}));
-  return [...games,...whiteGames];
+  const studyLines: [string,number,number][] = [
+    ['e4 e6 d4 d5 e5 c5 c3 Nc6 Nf3 Qb6',28,16],
+    ['e4 e6 d4 d5 e5 c5 c3 Nc6 Ba6 bxa6',7,7],
+    ['e4 e6 d4 d5 exd5 exd5 Nf3 Nf6 Bd3 Bd6',24,8],
+    ['e4 e6 d4 d5 Nc3 Bb4 e5 c5 a3 Bxc3+ bxc3',16,11],
+    ['e4 d5 exd5 Qxd5 Nc3 Qa5 d4 Nf6 Nf3',20,14],
+    ['e4 d5 Nc3 dxe4 Nxe4 Nf6 Nxf6+ exf6',8,3],
+    ['e4 e5 Nf3 Nc6 Bc4 Bc5 d3 Nf6',40,10],
+  ];
+  const studyGames: Game[]=[];
+  for(const [line,count,losses] of studyLines)for(let i=0;i<count;i++){
+    const n=studyGames.length;
+    studyGames.push({id:`demo-study-${n}`,white:'demo_player',black:`Study_opponent_${n+1}`,whiteRating:1580,blackRating:1550+(n*13)%200,
+      result:i<losses?'0-1':i===count-1&&losses<count?'1/2-1/2':'1-0',moves:line.split(' '),date:Date.UTC(2026,8,30)-(n%90)*86400000,speed:n%4?'rapid':'blitz',rated:true});
+  }
+  return [...games,...whiteGames,...studyGames];
 }
 export const DEMO_GAMES = makeDemo();
