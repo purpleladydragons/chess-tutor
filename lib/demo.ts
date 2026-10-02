@@ -1,4 +1,5 @@
 import type { Game } from './chess';
+import { expectedScore } from './ratings';
 const lines: [string, number, number, number][] = [
  ['e4 c6 d4 d5 e5 Bf5 Nf3 e6 Be2 c5', 94, .58, .06],
  ['e4 c6 d4 d5 exd5 cxd5 Bd3 Nc6 c3 Nf6', 66, .67, .09],
@@ -17,13 +18,14 @@ const lines: [string, number, number, number][] = [
 ];
 export function makeDemo(): Game[] {
   const games: Game[] = []; let id = 0;
+  const today=new Date();const anchor=Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate());
   for (const [line, count, win, draw] of lines) {
     for (let i=0; i<count; i++) {
       const n = id++;
       games.push({id: `demo-${n}`, white: `Opponent_${String(n+1).padStart(3,'0')}`, black: 'demo_player',
         whiteRating: 1350+(n*37)%450, blackRating: 1540+n%100,
         result: i < Math.round(count*win) ? '0-1' : i < Math.round(count*(win+draw)) ? '1/2-1/2' : '1-0',
-        moves: line.split(' '), date: Date.UTC(2026,8,30)-((n*17)%180)*86400000,
+        moves: line.split(' '), date: anchor-((n*17)%180)*86400000,
         speed: n%5===0?'blitz':'rapid', rated: n%7!==0});
     }
   }
@@ -41,8 +43,13 @@ export function makeDemo(): Game[] {
   for(const [line,count,losses] of studyLines)for(let i=0;i<count;i++){
     const n=studyGames.length;
     studyGames.push({id:`demo-study-${n}`,white:'demo_player',black:`Study_opponent_${n+1}`,whiteRating:1580,blackRating:1550+(n*13)%200,
-      result:i<losses?'0-1':i===count-1&&losses<count?'1/2-1/2':'1-0',moves:line.split(' '),date:Date.UTC(2026,8,30)-(n%90)*86400000,speed:n%4?'rapid':'blitz',rated:true});
+      result:i<losses?'0-1':i===count-1&&losses<count?'1/2-1/2':'1-0',moves:line.split(' '),date:anchor-(n%90)*86400000,speed:n%4?'rapid':'blitz',rated:true});
   }
-  return [...games,...whiteGames,...studyGames];
+  return [...games,...whiteGames,...studyGames].map(game=>{
+    // Illustrative rating changes for the clearly labeled synthetic library only.
+    const expected=expectedScore(game,'white');if(expected===undefined)return game;
+    const score=game.result==='1-0'?1:game.result==='1/2-1/2'?.5:0;
+    const change=Math.round(20*(score-expected));return {...game,whiteRatingDiff:change,blackRatingDiff:-change};
+  });
 }
 export const DEMO_GAMES = makeDemo();

@@ -5,6 +5,7 @@ export type Side = 'white' | 'black';
 export type Outcome = 'win' | 'draw' | 'loss';
 export type Game = {
   id: string; white: string; black: string; whiteRating?: number; blackRating?: number;
+  whiteRatingDiff?: number; blackRatingDiff?: number; whiteProvisional?: boolean; blackProvisional?: boolean;
   result: '1-0' | '0-1' | '1/2-1/2'; moves: string[]; date: number;
   speed: string; rated: boolean; url?: string;
 };
@@ -64,16 +65,30 @@ export function filterGames(games: Game[], username: string, side: Side, speed =
 }
 export function mergeGames(oldGames: Game[], newGames: Game[]) {
   const merged = new Map(oldGames.map(g => [g.id, g]));
-  for (const game of newGames) merged.set(game.id, game);
+  for (const game of newGames) {
+    const previous=merged.get(game.id);const enriched={...game};
+    // A PGN or older export may omit fields already known from Lichess.
+    for(const key of ['whiteRating','blackRating','whiteRatingDiff','blackRatingDiff','whiteProvisional','blackProvisional'] as const){
+      if(enriched[key]===undefined&&previous?.[key]!==undefined)Object.assign(enriched,{[key]:previous[key]});
+    }
+    merged.set(game.id,enriched);
+  }
   return [...merged.values()].sort((a,b) => b.date - a.date);
 }
 
-type LichessGame = {id?: string; variant?: string; status?: string; moves?: string; winner?: string; createdAt?: number; speed?: string; rated?: boolean; players?: {white?: {user?: {name?: string; id?: string}; rating?: number}; black?: {user?: {name?: string; id?: string}; rating?: number}}};
+type LichessPlayer = {user?: {name?: string; id?: string}; rating?: number; ratingDiff?: number; provisional?: boolean};
+type LichessGame = {id?: string; variant?: string; status?: string; moves?: string; winner?: string; createdAt?: number; speed?: string; rated?: boolean; players?: {white?: LichessPlayer; black?: LichessPlayer}};
+function integer(value:unknown,positive=false):number|undefined {
+  if(typeof value!=='number'&&!(typeof value==='string'&&/^[+-]?\d+$/.test(value.trim())))return undefined;
+  const n=Number(value);return Number.isSafeInteger(n)&&(!positive||n>0)?n:undefined;
+}
 export function fromLichess(raw: LichessGame): Game | null {
   if (!raw.id || (raw.variant && raw.variant !== 'standard') || !raw.moves || !['mate','resign','stalemate','timeout','draw','outoftime','cheat','variantEnd'].includes(raw.status ?? '')) return null;
   const white = raw.players?.white?.user?.name ?? raw.players?.white?.user?.id ?? 'Anonymous';
   const black = raw.players?.black?.user?.name ?? raw.players?.black?.user?.id ?? 'Anonymous';
-  return {id: raw.id, white, black, whiteRating: raw.players?.white?.rating, blackRating: raw.players?.black?.rating,
+  return {id: raw.id, white, black, whiteRating: integer(raw.players?.white?.rating,true), blackRating: integer(raw.players?.black?.rating,true),
+    whiteRatingDiff:integer(raw.players?.white?.ratingDiff),blackRatingDiff:integer(raw.players?.black?.ratingDiff),
+    whiteProvisional:raw.players?.white?.provisional,blackProvisional:raw.players?.black?.provisional,
     result: raw.winner === 'white' ? '1-0' : raw.winner === 'black' ? '0-1' : '1/2-1/2',
     moves: raw.moves.trim().split(/\s+/), date: raw.createdAt ?? 0, speed: raw.speed ?? 'unknown', rated: !!raw.rated,
     url: `https://lichess.org/${raw.id}`};
@@ -121,6 +136,7 @@ export function parsePgnGame(pgn: string): Game | null {
   const timestamp = Date.parse(`${(headers.UTCDate || headers.Date || '').replace(/\./g,'-')}T${headers.UTCTime || '12:00:00'}Z`);
   return {id: link?.[1] ?? `pgn-${stableHash(JSON.stringify([headers.White,headers.Black,headers.Date,headers.UTCTime,result,moves]))}`,
     white: headers.White || 'Unknown', black: headers.Black || 'Unknown',
-    whiteRating: Number(headers.WhiteElo) || undefined, blackRating: Number(headers.BlackElo) || undefined,
+    whiteRating: integer(headers.WhiteElo,true), blackRating: integer(headers.BlackElo,true),
+    whiteRatingDiff:integer(headers.WhiteRatingDiff),blackRatingDiff:integer(headers.BlackRatingDiff),
     result, moves, date: Number.isFinite(timestamp) ? timestamp : 0, speed, rated: /^rated\b/i.test(headers.Event ?? ''), url: link ? `https://lichess.org/${link[1]}` : undefined};
 }
