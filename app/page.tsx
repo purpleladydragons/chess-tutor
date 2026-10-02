@@ -42,6 +42,8 @@ export default function Home(){
     const combined=mergeGames(previous,incoming);const value={username:user,games:combined,importedAt:Date.now()};
     const previousIds=new Set(previous.map(g=>g.id));const refreshed=new Set(incoming.filter(g=>previousIds.has(g.id)).map(g=>g.id)).size;
     let message=`${(combined.length-previous.length).toLocaleString()} new games imported.${refreshed?` ${refreshed.toLocaleString()} existing games refreshed.`:''} ${combined.length.toLocaleString()} games in your library.${skipped?` ${skipped} unsupported or unmatched records skipped.`:''}`;
+    const ratedGames=combined.filter(g=>g.rated);const changes=ratedGames.filter(g=>ratingChange(g,g.white.toLowerCase()===user.toLowerCase()?'white':'black')!==undefined).length;
+    if(ratedGames.length)message+=` Rating changes saved for ${changes.toLocaleString()} of ${ratedGames.length.toLocaleString()} rated games.`;
     try{await saveLibrary(value);}catch{message+=' Browser storage is unavailable; this import will last for this session only.';}
     setLibrary(value);setSample(false);resetFilters();setActiveTab('explorer');setNotice(message);
   }
