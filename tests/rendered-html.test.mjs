@@ -10,6 +10,7 @@ test('built worker serves the opening explorer, metadata, and import validation'
   assert.match(html,/Your games\. A clearer plan\./);assert.match(html,/Your opening paths/);assert.match(html,/Import games/);assert.match(html,/Sample library/);assert.match(html,/1\. e4 c6 2\. d4 d5/);assert.match(html,/og\.png/);assert.doesNotMatch(html,/codex-preview|react-loading-skeleton/);
   assert.match(html,/Study priorities/);
   const invalid=await worker.fetch('/api/lichess?username=Alice&max=0');assert.equal(invalid.status,400);
+  const invalidChessCom=await worker.fetch('/api/chesscom?username=Alice&month=2026/13');assert.equal(invalidChessCom.status,400);
   const icon=await worker.fetch('/favicon.png');assert.equal(icon.status,200);assert.match(icon.headers.get('content-type'),/image\/png/);
   const engine=await worker.fetch('/engine/stockfish-19-lite-single.wasm');assert.equal(engine.status,200);assert.match(engine.headers.get('content-type'),/application\/wasm/);
   assert.deepEqual([...new Uint8Array(await engine.arrayBuffer()).slice(0,4)],[0,97,115,109]);

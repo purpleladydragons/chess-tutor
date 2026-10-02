@@ -3,16 +3,31 @@ import openingData from './openings.json';
 
 export type Side = 'white' | 'black';
 export type Outcome = 'win' | 'draw' | 'loss';
+export type GameSource = 'lichess' | 'chesscom' | 'pgn';
 export type Game = {
   id: string; white: string; black: string; whiteRating?: number; blackRating?: number;
   whiteRatingDiff?: number; blackRatingDiff?: number; whiteProvisional?: boolean; blackProvisional?: boolean;
   result: '1-0' | '0-1' | '1/2-1/2'; moves: string[]; date: number;
-  speed: string; rated: boolean; url?: string;
+  speed: string; rated: boolean; ratedUnknown?: boolean; source?: GameSource; url?: string;
 };
 export type Library = { username: string; games: Game[]; importedAt: number };
 export type Stats = { total: number; win: number; draw: number; loss: number };
 export type Branch = { path: string[]; games: Game[]; stats: Stats; move: string; name: string; eco?: string };
 export type Opening = { name: string; eco?: string; fen: string; namedAt: number };
+export const sourceLabel=(source:GameSource)=>source==='chesscom'?'Chess.com':source==='lichess'?'Lichess':'Other PGN';
+export function gameSource(game:Game):GameSource {return game.source??(game.id.startsWith('chesscom-')?'chesscom':game.url?.startsWith('https://lichess.org/')?'lichess':'pgn');}
+export function chessComLink(value:string|undefined):{id:string;url:string}|undefined {
+  const match=value?.match(/^https:\/\/(?:www\.)?chess\.com\/(?:(?:game\/(live|daily))|(?:(live|daily)\/game))\/(\d+)(?:[/?#].*)?$/i);
+  if(!match)return undefined;const kind=(match[1]??match[2]).toLowerCase();
+  return {id:`chesscom-${kind}-${match[3]}`,url:`https://www.chess.com/game/${kind}/${match[3]}`};
+}
+export function timeControlSpeed(value:string|undefined,source:GameSource='pgn'):string {
+  if(value==='-'||/^\d+\/\d+$/.test(value??''))return 'correspondence';
+  const parts=value?.match(/^(\d+)(?:\+(\d+))?$/);if(!parts)return 'unknown';
+  const seconds=Number(parts[1])+40*Number(parts[2]??0);
+  if(source==='chesscom')return seconds<180?'bullet':seconds<600?'blitz':'rapid';
+  return seconds<29?'ultraBullet':seconds<180?'bullet':seconds<480?'blitz':seconds<1500?'rapid':'classical';
+}
 const openings = openingData as Record<string, {name: string; eco: string; plies: number}>;
 const openingCache = new Map<string, Opening>();
 
@@ -71,6 +86,7 @@ export function mergeGames(oldGames: Game[], newGames: Game[]) {
     for(const key of ['whiteRating','blackRating','whiteRatingDiff','blackRatingDiff','whiteProvisional','blackProvisional'] as const){
       if(enriched[key]===undefined&&previous?.[key]!==undefined)Object.assign(enriched,{[key]:previous[key]});
     }
+    if(previous&&game.ratedUnknown&&!previous.ratedUnknown){enriched.rated=previous.rated;enriched.ratedUnknown=false;}
     merged.set(game.id,enriched);
   }
   return [...merged.values()].sort((a,b) => b.date - a.date);
@@ -86,7 +102,7 @@ export function fromLichess(raw: LichessGame): Game | null {
   if (!raw.id || (raw.variant && raw.variant !== 'standard') || !raw.moves || !['mate','resign','stalemate','timeout','draw','outoftime','cheat','variantEnd'].includes(raw.status ?? '')) return null;
   const white = raw.players?.white?.user?.name ?? raw.players?.white?.user?.id ?? 'Anonymous';
   const black = raw.players?.black?.user?.name ?? raw.players?.black?.user?.id ?? 'Anonymous';
-  return {id: raw.id, white, black, whiteRating: integer(raw.players?.white?.rating,true), blackRating: integer(raw.players?.black?.rating,true),
+  return {id: raw.id, source:'lichess', white, black, whiteRating: integer(raw.players?.white?.rating,true), blackRating: integer(raw.players?.black?.rating,true),
     whiteRatingDiff:integer(raw.players?.white?.ratingDiff),blackRatingDiff:integer(raw.players?.black?.ratingDiff),
     whiteProvisional:raw.players?.white?.provisional,blackProvisional:raw.players?.black?.provisional,
     result: raw.winner === 'white' ? '1-0' : raw.winner === 'black' ? '0-1' : '1/2-1/2',
@@ -130,13 +146,15 @@ export function parsePgnGame(pgn: string): Game | null {
   if (result !== '1-0' && result !== '0-1' && result !== '1/2-1/2') return null;
   const moves = chess.history(); if (!moves.length) return null;
   const link = headers.Site?.match(/^https:\/\/lichess\.org\/([a-zA-Z0-9]{8})(?:[a-zA-Z0-9]{4})?(?:\/.*)?$/);
-  const seconds = headers.TimeControl?.match(/^(\d+)\+(\d+)$/);
-  const estimate = seconds ? Number(seconds[1]) + Number(seconds[2])*40 : 0;
-  const speed = !seconds ? (headers.TimeControl === '-' ? 'correspondence' : 'unknown') : estimate < 29 ? 'ultraBullet' : estimate < 180 ? 'bullet' : estimate < 480 ? 'blitz' : estimate < 1500 ? 'rapid' : 'classical';
+  const chesscom=chessComLink(headers.Link)??chessComLink(headers.Site);
+  const source:GameSource=chesscom||/^(?:https:\/\/)?(?:www\.)?chess\.com\/?$/i.test(headers.Site??'')?'chesscom':link?'lichess':'pgn';
+  const speed=timeControlSpeed(headers.TimeControl,source);
   const timestamp = Date.parse(`${(headers.UTCDate || headers.Date || '').replace(/\./g,'-')}T${headers.UTCTime || '12:00:00'}Z`);
-  return {id: link?.[1] ?? `pgn-${stableHash(JSON.stringify([headers.White,headers.Black,headers.Date,headers.UTCTime,result,moves]))}`,
+  const rated=/^rated\b/i.test(headers.Event??'')||/^(true|yes|1)$/i.test(headers.Rated??'');
+  const ratedKnown=rated||/^(casual|unrated)\b/i.test(headers.Event??'')||/^(false|no|0)$/i.test(headers.Rated??'');
+  return {id: chesscom?.id??link?.[1] ?? `${source==='chesscom'?'chesscom-pgn':'pgn'}-${stableHash(JSON.stringify([headers.White,headers.Black,headers.Date,headers.UTCTime,result,moves]))}`,source,
     white: headers.White || 'Unknown', black: headers.Black || 'Unknown',
     whiteRating: integer(headers.WhiteElo,true), blackRating: integer(headers.BlackElo,true),
     whiteRatingDiff:integer(headers.WhiteRatingDiff),blackRatingDiff:integer(headers.BlackRatingDiff),
-    result, moves, date: Number.isFinite(timestamp) ? timestamp : 0, speed, rated: /^rated\b/i.test(headers.Event ?? ''), url: link ? `https://lichess.org/${link[1]}` : undefined};
+    result, moves, date: Number.isFinite(timestamp) ? timestamp : 0, speed, rated, ratedUnknown:source==='chesscom'&&!ratedKnown, url: chesscom?.url??(link ? `https://lichess.org/${link[1]}` : undefined)};
 }

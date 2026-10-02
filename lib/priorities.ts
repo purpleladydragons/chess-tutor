@@ -1,10 +1,10 @@
 import { matchesPath, outcome, type Game, type Side, type Stats } from './chess';
-import { addRatingGame, emptyRating, ratingPools, ratingPriority, type RatingSummary } from './ratings';
+import { addRatingGame, emptyRating, ratingPools, ratingPriority, ratingSources, type RatingSummary } from './ratings';
 
 export type StudyMode = 'rating' | 'rating-net' | 'contrast' | 'volume' | 'perfect';
 export type MoveOwner = 'all' | 'mine' | 'opponent';
 export type StudyNode = { path: string[]; stats: Stats; rating:RatingSummary; parent?: StudyNode; children: Map<string, StudyNode> };
-export type StudyTree = { root: StudyNode; nodes: StudyNode[]; total: number; overallLossRate: number; scope: string[]; maxMoves: number; ratingPools:string[] };
+export type StudyTree = { root: StudyNode; nodes: StudyNode[]; total: number; overallLossRate: number; scope: string[]; maxMoves: number; ratingPools:string[]; ratingSources:string[] };
 export type StudyCandidate = {
   path: string[]; stats: Stats; rating:RatingSummary; ratingPriority:number; owner: 'mine' | 'opponent'; siblings: {path:string[];stats:Stats;rating:RatingSummary}[];
   alternatives: Stats; frequency: number; lossRate: number; otherLossRate: number | null;
@@ -26,7 +26,8 @@ export function buildStudyTree(games: Game[], side: Side, scope: string[] = [], 
       child.stats.total++;child.stats[result]++;addRatingGame(child.rating,game,side);node=child;
     }
   }
-  return {root,nodes,total:root.stats.total,overallLossRate:root.stats.total?root.stats.loss/root.stats.total:0,scope,maxMoves,ratingPools:ratingPools(games.filter(g=>matchesPath(g,scope)))};
+  const scoped=games.filter(g=>matchesPath(g,scope));
+  return {root,nodes,total:root.stats.total,overallLossRate:root.stats.total?root.stats.loss/root.stats.total:0,scope,maxMoves,ratingPools:ratingPools(scoped),ratingSources:ratingSources(scoped)};
 }
 export function candidateFor(node: StudyNode, tree: StudyTree, side: Side): StudyCandidate {
   const siblings=[...(node.parent?.children.values()??[])].filter(n=>n!==node);
@@ -47,7 +48,7 @@ export function candidateFor(node: StudyNode, tree: StudyTree, side: Side): Stud
 export function related(a: string[], b: string[]) {return a.slice(0,Math.min(a.length,b.length)).every((move,i)=>move===b[i]);}
 export function rankStudy(tree: StudyTree, side: Side, options: {mode:StudyMode;minGames:number;owner:MoveOwner;collapse:boolean;minMove?:number}) {
   const min=Math.max(2,options.minGames);
-  if((options.mode==='rating'||options.mode==='rating-net')&&tree.ratingPools.length!==1)return {candidates:[],available:0,collapsed:0};
+  if((options.mode==='rating'||options.mode==='rating-net')&&(tree.ratingPools.length!==1||tree.ratingSources.length!==1))return {candidates:[],available:0,collapsed:0};
   let candidates=tree.nodes.filter(n=>n.stats.total>=min).map(n=>candidateFor(n,tree,side)).filter(c=>
     (options.owner==='all'||c.owner===options.owner) && Math.ceil(c.path.length/2)>=(options.minMove??1) &&
     (options.mode==='rating'?c.branching&&c.rating.count>=min&&c.ratingPriority>1e-9:options.mode==='rating-net'?c.branching&&c.rating.changeCount>=min&&c.rating.netChange<0:options.mode==='perfect'?c.firstAllLoss:options.mode==='volume'?c.branching&&c.stats.loss>0:c.branching&&c.alternatives.total>=min&&c.priority>0));

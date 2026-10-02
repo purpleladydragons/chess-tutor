@@ -1,6 +1,6 @@
 # Opening Lines
 
-A personal chess opening explorer with a proportional flow diagram, move-by-move results, and a position board. Import public Lichess games by username or a multi-game PGN file. Game libraries are saved in IndexedDB on the current browser/device; no game database or API key is required.
+A personal chess opening explorer with a proportional flow diagram, move-by-move results, and a position board. Import public Lichess or Chess.com games by username, or upload a multi-game PGN file from either site. Game libraries are saved in IndexedDB on the current browser/device; no game database or API key is required.
 
 ## Develop
 
@@ -31,9 +31,18 @@ npm run test:render  # smoke test the built worker's HTML
 - Synthetic sample games are explicitly labeled. They are never merged into an imported library. Their rating changes are illustrative values generated with a fixed-factor Elo approximation, not actual Lichess changes.
 - Study priorities find recurring problem branches; optional on-device Stockfish analysis checks a selected position separately.
 
+## Chess.com imports
+
+- Select **Import games → Chess.com**, enter a username, and choose a game limit. Public monthly archives are requested serially, newest first, through `/api/chesscom`. The limit counts retrieved records, including skipped variants. Cancelled or failed imports leave the saved library unchanged. Recent games may not yet appear in Chess.com's cached archives.
+- **Upload PGN** supports Chess.com `Link` tags, live and daily game IDs, clock comments, base-only time controls such as `300`, increments, and daily controls such as `1/259200`. API imports use the supplied `time_class`. Standard games keep their moves, results, dates, ratings and Chess.com review links. Re-importing the same game through the API and PGN merges by its canonical game ID.
+- Chess.com PGNs commonly omit rated status. It remains unknown unless an explicit tag identifies it, a username import supplies it, or the user confirms those PGN games were rated. Unknown status is excluded from rated filters and rating priorities; confirmed casual games are never relabeled by this checkbox. Uploading a less complete PGN preserves rated status already learned from the API.
+- Chess.com's documented monthly export does not supply per-game rating changes. Those values remain missing. The approximate ranking uses exported PGN game ratings; it does not substitute the JSON player ratings (documented as post-game) or infer deltas from adjacent games. PGN rating timing is not independently verified. Actual net-points rankings require explicit recorded changes.
+- The rating view selects one site and one time control at a time; it never combines Lichess and Chess.com rating pools. Its review link preserves the selected site. As before, this browser stores one player username at a time: importing a different username displays a replacement notice; matching usernames can contain games from both sites.
+- API and download formats: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api), [PGN download guide](https://support.chess.com/en/articles/8705305-how-do-i-get-a-pgn-of-my-game).
+
 ## Study priorities
 
-- **Rating impact** defaults to **Below expected score**: each game's expected score is `1 / (1 + 10 ** ((opponentRating - playerRating) / 400))`, using the pre-game ratings and a result of 1, 0.5, or 0. Rankings use `100 × (eligible branch games / eligible scope games) × max(0, (sum of expected scores − sum of actual scores) / (eligible branch games + 5))`. Five neutral pseudo-games shrink small-sample shortfalls toward zero. This is a transparent Elo approximation, not an exact reconstruction of Lichess's Glicko-2 rating system.
+- **Rating impact** defaults to **Below expected score**: each game's expected score is `1 / (1 + 10 ** ((opponentRating - playerRating) / 400))`, using Lichess pre-game ratings (or exported PGN game ratings for Chess.com) and a result of 1, 0.5, or 0. Rankings use `100 × (eligible branch games / eligible scope games) × max(0, (sum of expected scores − sum of actual scores) / (eligible branch games + 5))`. Five neutral pseudo-games shrink small-sample shortfalls toward zero. This is a transparent Elo approximation, not an exact reconstruction of Lichess's Glicko-2 rating system.
 - Switch to **Net rating points lost** to rank by the sum of recorded rating changes from the selected player's side, most negative first. Wins, draws, and losses all contribute; frequency is already included in the total. Missing changes are excluded rather than treated as zero. An opponent's change is never used to infer your own.
 - Rating modes use rated games in one rating pool at a time and default to the last 90 days. The global date filter and rating window both apply. Games flagged provisional for either player are excluded unless enabled. Details show sample sizes, data coverage, actual versus expected score, and opponent bands (weaker by more than 100 points, within 100 points, stronger by more than 100 points).
 - Older libraries need another Lichess import to fill in recorded changes. PGN imports support `WhiteElo`, `BlackElo`, `WhiteRatingDiff`, and `BlackRatingDiff`; absent or invalid values remain missing. A known zero change is retained. Minimum sample requirements apply to games with the data required by the selected ranking.

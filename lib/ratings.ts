@@ -1,4 +1,4 @@
-import { outcome, type Game, type Side } from './chess';
+import { gameSource, outcome, type Game, type GameSource, type Side } from './chess';
 
 export const RATING_POOLS = ['ultraBullet','bullet','blitz','rapid','classical','correspondence'] as const;
 export type RatingBand = 'weaker'|'similar'|'stronger';
@@ -35,8 +35,12 @@ export function ratingPools(games:Game[]):string[]{
   for(const g of games)if(g.rated&&RATING_POOLS.some(p=>p===g.speed))counts.set(g.speed,(counts.get(g.speed)??0)+1);
   return [...counts.keys()].sort((a,b)=>counts.get(b)!-counts.get(a)!||a.localeCompare(b));
 }
-export function ratingCohort(games:Game[],pool:string,days:number,includeProvisional=false,now=Date.now()){
-  return games.filter(g=>g.rated&&g.speed===pool&&RATING_POOLS.some(p=>p===pool)&&(!days||(g.date>0&&g.date>=now-days*86400000))&&(includeProvisional||(!g.whiteProvisional&&!g.blackProvisional)));
+export function ratingSources(games:Game[]):GameSource[]{
+  const counts=new Map<GameSource,number>();for(const g of games)if(g.rated)counts.set(gameSource(g),(counts.get(gameSource(g))??0)+1);
+  return [...counts.keys()].sort((a,b)=>counts.get(b)!-counts.get(a)!);
+}
+export function ratingCohort(games:Game[],pool:string,days:number,includeProvisional=false,now=Date.now(),source?:GameSource){
+  return games.filter(g=>g.rated&&(!source||gameSource(g)===source)&&g.speed===pool&&RATING_POOLS.some(p=>p===pool)&&(!days||(g.date>0&&g.date>=now-days*86400000))&&(includeProvisional||(!g.whiteProvisional&&!g.blackProvisional)));
 }
 export function ratingPriority(branch:RatingSummary,scope:RatingSummary):number {
   if(!scope.count||!branch.count)return 0;
